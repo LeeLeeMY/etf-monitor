@@ -7,7 +7,7 @@ import akshare as ak
 WEBHOOK = os.environ.get("FEISHU_WEBHOOK")
 
 # 报警阈值：溢价率低于该值（%）就报警（负值表示折价）
-THRESHOLD = 5   # 例如 5 表示低于 5% 就报警（包括负值）
+THRESHOLD = 9   # 例如 5 表示低于 5% 就报警（包括负值）
 # -------------------------
 
 # 定义要监控的 ETF 列表（按你要求分类，但代码里统一处理）
