@@ -1,22 +1,18 @@
 import os
 import requests
 import akshare as ak
+import datetime
 
-# ---------- 配置区 ----------
-# 这里填你的飞书 webhook（从环境变量读取）
+# ---------- 配置 ----------
 WEBHOOK = os.environ.get("FEISHU_WEBHOOK")
+THRESHOLD = 5   # 报警阈值：溢价率 < 5% 时报警
+# -----------------------
 
-# 报警阈值：溢价率低于该值（%）就报警（负值表示折价）
-THRESHOLD = 9   # 例如 5 表示低于 5% 就报警（包括负值）
-# -------------------------
-
-# 定义要监控的 ETF 列表（按你要求分类，但代码里统一处理）
 NAS_ETF = ["159501", "159941", "513100", "513300", "513110", "159696", "513870"]
 SP_ETF  = ["513650", "513500", "159655", "159612"]
 TARGET_CODES = NAS_ETF + SP_ETF
 
 def send_msg(text):
-    """发送消息到飞书"""
     if WEBHOOK:
         try:
             resp = requests.post(WEBHOOK, json={"msg_type":"text","content":{"text":text}})
@@ -28,48 +24,113 @@ def send_msg(text):
             print("消息发送异常:", e)
 
 def parse_premium(raw):
-    """将原始溢价率数据转换成浮点数（单位：%）"""
+    """将原始折价率转换为溢价率（取反）"""
     if isinstance(raw, str):
-        # 字符串如 "-0.05%" 或 "0.05%"
-        return float(raw.replace('%', ''))
+        val = float(raw.replace('%', ''))
     else:
-        # 数字，可能是小数（-0.05）或已经百分数（-5）
         if abs(raw) < 1:
-            return raw * 100
+            val = raw * 100
         else:
-            return -raw
+            val = raw
+    return -val
 
-print("开始获取ETF数据...")
-try:
-    # 一次性获取所有ETF的实时行情
-    df = ak.fund_etf_spot_em()
-    print("数据获取成功，共 %d 只ETF" % len(df))
+def is_trading_time(hour, minute):
+    """判断是否在有效交易时段（9:30-11:30 和 13:00-15:00）"""
+    if hour == 9 and minute >= 30:
+        return True
+    if hour == 10:
+        return True
+    if hour == 11 and minute < 30:
+        return True
+    if hour == 13:
+        return True
+    if hour == 14:
+        return True
+    if hour == 15 and minute == 0:
+        return True
+    return False
 
-    # 过滤出我们关心的代码
-    matched = df[df['代码'].isin(TARGET_CODES)]
-    
-    if matched.empty:
-        print("未找到任何目标ETF，可能非交易时间无行情")
+def is_high_freq(hour, minute):
+    """高频时段：9:30-10:30 和 14:30-15:00"""
+    if hour == 9 and minute >= 30:
+        return True
+    if hour == 10 and minute < 30:
+        return True
+    if hour == 14 and minute >= 30:
+        return True
+    if hour == 15 and minute == 0:
+        return True
+    return False
+
+def is_low_freq(hour, minute):
+    """低频时段：10:30-14:30"""
+    if hour == 10 and minute >= 30:
+        return True
+    if hour in [11, 12, 13]:   # 包含午休，但会先被 is_trading_time 过滤掉 11:30-13:00
+        return True
+    if hour == 14 and minute < 30:
+        return True
+    return False
+
+# ========== 主逻辑 ==========
+print("开始执行监控...")
+
+# 1. 获取当前北京时间
+beijing_now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=8)))
+hour = beijing_now.hour
+minute = beijing_now.minute
+weekday = beijing_now.weekday()  # 0=周一, 6=周日
+
+# 2. 周末跳过
+if weekday >= 5:
+    print("周末休市，跳过")
+    exit(0)
+
+# 3. 判断交易时段
+if not is_trading_time(hour, minute):
+    print("非交易时段（集合竞价/午休/收盘后），跳过")
+    exit(0)
+
+# 4. 判断高频/低频
+if is_high_freq(hour, minute):
+    print(f"高频时段（{hour:02d}:{minute:02d}），正常执行")
+    pass   # 直接执行
+elif is_low_freq(hour, minute):
+    # 低频时段，只允许每15分钟执行一次（0,15,30,45分）
+    if minute % 15 != 0:
+        print(f"低频时段，分钟 {minute} 不是15的倍数，跳过")
+        exit(0)
     else:
-        alert_list = []   # 收集需要报警的ETF信息
+        print(f"低频时段，分钟 {minute} 是15的倍数，执行")
+else:
+    # 理论上不会到这里
+    print("未知时段，跳过")
+    exit(0)
+
+# 5. 获取数据并报警
+try:
+    df = ak.fund_etf_spot_em()
+    print(f"数据获取成功，共 {len(df)} 只ETF")
+    matched = df[df['代码'].isin(TARGET_CODES)]
+    if matched.empty:
+        print("未找到目标ETF，可能非交易时间无行情")
+    else:
+        alert_list = []
         for idx, row in matched.iterrows():
             code = row['代码']
             name = row['名称']
-            raw_premium = row['基金折价率']
-            premium = parse_premium(raw_premium)
+            raw = row['基金折价率']
+            premium = parse_premium(raw)
             print(f"{code} {name} 溢价率: {premium}%")
 
-            # 判断是否低于阈值
-            if premium < THRESHOLD:   # 注意：负数也满足小于正数
+            if premium < THRESHOLD:
                 alert_list.append(f"{code} {name} 溢价率为 {premium}%，低于 {THRESHOLD}%")
         
-        # 统一发送报警（如果列表不为空）
         if alert_list:
             msg = "⚠️ ETF溢价监控报警：\n" + "\n".join(alert_list)
             send_msg(msg)
         else:
             print("所有ETF溢价率正常，未触发报警")
-
 except Exception as e:
     error_msg = f"监控脚本运行异常: {e}"
     print(error_msg)
