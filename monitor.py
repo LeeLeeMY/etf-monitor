@@ -37,7 +37,7 @@ def parse_premium(raw):
         if abs(raw) < 1:
             return raw * 100
         else:
-            return raw
+            return -raw
 
 print("开始获取ETF数据...")
 try:
