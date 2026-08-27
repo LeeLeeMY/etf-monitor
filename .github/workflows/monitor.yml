@@ -2,7 +2,7 @@ name: ETF Premium Monitor
 
 on:
   schedule:
-    - cron: '*/10 9-15 * * 1-5'
+    - cron: '4,13,24,36,47,56 9-15 * * 1-5'
       timezone: Asia/Shanghai
   workflow_dispatch:
 
