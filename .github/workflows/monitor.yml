@@ -15,6 +15,40 @@ jobs:
         with:
           python-version: '3.10'
       - run: pip install -r requirements.txt
+
+      # ===== 诊断脚本开始（诊断完可以删掉）=====
+      - name: 网络诊断
+        run: |
+          echo "=== 出口 IP ==="
+          curl -s https://ipinfo.io/json || true
+          echo ""
+          echo "=== 东财 clist 接口 ==="
+          curl -s -o /dev/null -w "东财: %{http_code}\n" \
+            -A "Mozilla/5.0" \
+            "https://push2delay.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&ut=bd1d9ddb04089700cf9c27f6f7426281&fltt=2&invt=2&fid=f12&fs=b:MK0021&fields=f12,f14" || true
+          echo "=== 集思录 ==="
+          curl -s -o /dev/null -w "集思录: %{http_code}\n" \
+            -A "Mozilla/5.0" "https://www.jisilu.cn/data/qdii/" || true
+          echo "=== 新浪 ==="
+          curl -s -o /dev/null -w "新浪: %{http_code}\n" \
+            -A "Mozilla/5.0" "https://hq.sinajs.cn/list=sh513100" || true
+
+      - name: Python 测试东财
+        run: |
+          python -c "
+          import requests
+          try:
+              r = requests.get('https://push2delay.eastmoney.com/api/qt/clist/get',
+                  params={'pn':'1','pz':'100','po':'1','np':'1',
+                          'ut':'bd1d9ddb04089700cf9c27f6f7426281','fltt':'2',
+                          'invt':'2','fid':'f12','fs':'b:MK0021','fields':'f12,f14'},
+                  headers={'User-Agent':'Mozilla/5.0'}, timeout=10)
+              print('Python 请求东财状态码:', r.status_code)
+          except Exception as e:
+              print('Python 请求异常:', e)
+          "
+      # ===== 诊断脚本结束 =====
+
       - run: python monitor.py
         env:
           FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
