@@ -4,7 +4,8 @@ import akshare as ak
 
 # ---------- 配置 ----------
 WEBHOOK = os.environ.get("FEISHU_WEBHOOK")
-THRESHOLD = 5   # 报警阈值：溢价率 < 5% 时报警（可根据需要调整）
+#JSL_COOKIE = os.environ.get("JSL_COOKIE", "")  # 集思录登录 Cookie
+THRESHOLD = 5   # 报警阈值：溢价率 < 5% 时报警
 
 # -----------------------
 
@@ -26,21 +27,21 @@ def send_msg(text):
 print("开始执行监控...")
 
 try:
-    # 使用集思录 ETF 实时行情接口（替代东财的 fund_etf_spot_em）
-    df = ak.fund_etf_spot_jsl()
-    print(f"数据获取成功，共 {len(df)} 只ETF")
+    # 使用集思录 QDII 欧美指数接口（替代东财 fund_etf_spot_em）
+    df = ak.qdii_e_index_jsl(cookie=JSL_COOKIE)
+    print(f"数据获取成功，共 {len(df)} 条记录")
     
     # 筛选目标 ETF
     matched = df[df['代码'].isin(TARGET_CODES)]
     if matched.empty:
-        print("未找到目标ETF，可能非交易时间无行情")
+        print("未找到目标ETF，可能非交易时间或数据源未覆盖")
     else:
         alert_list = []
         for idx, row in matched.iterrows():
             code = row['代码']
             name = row['名称']
-            # 集思录接口直接提供溢价率，列名为 '溢价率'，格式如 "1.23%"
-            premium_raw = row['溢价率']
+            # 集思录接口直接提供 T-1溢价率，格式如 "1.23%"
+            premium_raw = row['T-1溢价率']
             if isinstance(premium_raw, str):
                 premium = float(premium_raw.replace('%', ''))
             else:
