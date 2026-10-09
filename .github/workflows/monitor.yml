@@ -1,9 +1,6 @@
 name: ETF Premium Monitor
 
 on:
- # schedule:
-    #- cron: '*/33 9-15 * * 1-5'
-      #timezone: Asia/Shanghai
   workflow_dispatch:
 
 jobs:
@@ -18,3 +15,4 @@ jobs:
       - run: python monitor.py
         env:
           FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
+          JSL_COOKIE: ${{ secrets.JSL_COOKIE }}
