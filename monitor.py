@@ -4,7 +4,8 @@ import akshare as ak
 
 # ---------- 配置 ----------
 WEBHOOK = os.environ.get("FEISHU_WEBHOOK")
-THRESHOLD = 5   # 报警阈值：溢价率 < 9% 时报警（你自己调 ，想改就改这个数）
+THRESHOLD = 5   # 报警阈值：溢价率 < 5% 时报警（可根据需要调整）
+
 # -----------------------
 
 NAS_ETF = ["159501", "159941", "513100", "513300", "513110", "159696", "513870"]
@@ -22,22 +23,14 @@ def send_msg(text):
         except Exception as e:
             print("消息发送异常:", e)
 
-def parse_premium(raw):
-    """将原始折价率转换为溢价率（取反）"""
-    if isinstance(raw, str):
-        val = float(raw.replace('%', ''))
-    else:
-        if abs(raw) < 1:
-            val = raw * 100
-        else:
-            val = raw
-    return -val
-
 print("开始执行监控...")
 
 try:
-    df = ak.fund_etf_spot_em()
+    # 使用集思录 ETF 实时行情接口（替代东财的 fund_etf_spot_em）
+    df = ak.fund_etf_spot_jsl()
     print(f"数据获取成功，共 {len(df)} 只ETF")
+    
+    # 筛选目标 ETF
     matched = df[df['代码'].isin(TARGET_CODES)]
     if matched.empty:
         print("未找到目标ETF，可能非交易时间无行情")
@@ -46,8 +39,12 @@ try:
         for idx, row in matched.iterrows():
             code = row['代码']
             name = row['名称']
-            raw = row['基金折价率']
-            premium = parse_premium(raw)
+            # 集思录接口直接提供溢价率，列名为 '溢价率'，格式如 "1.23%"
+            premium_raw = row['溢价率']
+            if isinstance(premium_raw, str):
+                premium = float(premium_raw.replace('%', ''))
+            else:
+                premium = float(premium_raw)
             print(f"{code} {name} 溢价率: {premium}%")
 
             if premium < THRESHOLD:
