@@ -4,7 +4,7 @@ import akshare as ak
 
 # ---------- 配置 ----------
 WEBHOOK = os.environ.get("FEISHU_WEBHOOK")
-#JSL_COOKIE = os.environ.get("JSL_COOKIE", "")  # 集思录登录 Cookie
+JSL_COOKIE = os.environ.get("JSL_COOKIE", "")  # 集思录登录 Cookie
 THRESHOLD = 5   # 报警阈值：溢价率 < 5% 时报警
 
 # -----------------------
